@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: booking-service
+
+  # H2 in-memory database configuration
+  datasource:
+    url: jdbc:h2:mem:bookingdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # JPA / Hibernate settings
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop    # Auto-create tables from entities (dev only)
+    show-sql: true             # Log SQL queries for debugging
+    properties:
+      hibernate:
+        format_sql: true
+
+  # H2 web console (access at http://localhost:8080/h2-console)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: 8080
