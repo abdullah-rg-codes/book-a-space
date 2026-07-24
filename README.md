@@ -1,4 +1,4 @@
-# Book-A-Space
+# Book A Space
 
 Reserve meeting rooms without double-booking headaches. Handles idempotent requests, concurrent slot locking, grace-period cancellations, and room utilization analytics.
 
