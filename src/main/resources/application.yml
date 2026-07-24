@@ -27,3 +27,15 @@ spring:
 
 server:
   port: 8080
+
+# Logging configuration
+logging:
+  level:
+    # Application logs — DEBUG to see method entry + params
+    com.everquint.bookingservice: DEBUG
+    # Reduce noise from framework
+    org.springframework: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%level] %logger{36} - %msg%n"
