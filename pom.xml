@@ -48,6 +48,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- PostgreSQL: Production database (Render) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Swagger/OpenAPI: auto-generated API docs + interactive UI -->
         <dependency>
             <groupId>org.springdoc</groupId>
