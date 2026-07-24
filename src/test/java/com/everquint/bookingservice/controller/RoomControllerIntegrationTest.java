@@ -1,5 +1,7 @@
 package com.everquint.bookingservice.controller;
 
+import com.everquint.bookingservice.repository.BookingRepository;
+import com.everquint.bookingservice.repository.IdempotencyRepository;
 import com.everquint.bookingservice.repository.RoomRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,8 +34,16 @@ class RoomControllerIntegrationTest {
     @Autowired
     private RoomRepository roomRepository;
 
+    @Autowired
+    private BookingRepository bookingRepository;
+
+    @Autowired
+    private IdempotencyRepository idempotencyRepository;
+
     @BeforeEach
     void setUp() {
+        idempotencyRepository.deleteAll();
+        bookingRepository.deleteAll();
         roomRepository.deleteAll();
     }
 
