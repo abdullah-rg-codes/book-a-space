@@ -7,6 +7,7 @@ import com.everquint.bookingservice.entity.Booking;
 import com.everquint.bookingservice.entity.BookingStatus;
 import com.everquint.bookingservice.entity.Room;
 import com.everquint.bookingservice.exception.BookingConflictException;
+import com.everquint.bookingservice.exception.BookingNotFoundException;
 import com.everquint.bookingservice.exception.RoomNotFoundException;
 import com.everquint.bookingservice.exception.ValidationException;
 import com.everquint.bookingservice.repository.BookingRepository;
@@ -125,6 +126,39 @@ public class BookingService {
         );
     }
 
+    /**
+     * Cancels a booking with grace period enforcement.
+     *
+     * Rules:
+     * 1. Booking must exist (404 if not found)
+     * 2. Already cancelled → no-op, return existing cancelled booking
+     * 3. Can only cancel up to 1 hour before startTime (400 if too late)
+     */
+    @Transactional
+    public BookingResponse cancelBooking(String bookingId) {
+        UUID id = parseBookingId(bookingId);
+
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+
+        // Already cancelled — no-op, return as-is
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            return BookingResponse.from(booking);
+        }
+
+        // Grace period: must cancel at least 1 hour before start time
+        LocalDateTime cancellationDeadline = booking.getStartTime().minusHours(1);
+        if (!LocalDateTime.now().isBefore(cancellationDeadline)) {
+            throw new ValidationException(
+                    "Booking can only be cancelled up to 1 hour before start time");
+        }
+
+        // Cancel the booking
+        booking.setStatus(BookingStatus.CANCELLED);
+        Booking saved = bookingRepository.save(booking);
+        return BookingResponse.from(saved);
+    }
+
     // Private validation methods
 
     /**
@@ -181,6 +215,17 @@ public class BookingService {
             return UUID.fromString(roomId);
         } catch (IllegalArgumentException e) {
             throw new ValidationException("Invalid roomId format: " + roomId);
+        }
+    }
+
+    /**
+     * Parses a string bookingId into a UUID.
+     */
+    private UUID parseBookingId(String bookingId) {
+        try {
+            return UUID.fromString(bookingId);
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException("Invalid bookingId format: " + bookingId);
         }
     }
 }
