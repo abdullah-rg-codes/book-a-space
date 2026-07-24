@@ -2,6 +2,8 @@
 
 Reserve meeting rooms without double-booking headaches. Handles idempotent requests, concurrent slot locking, grace-period cancellations, and room utilization analytics.
 
+**Live API:** [https://book-a-space.onrender.com/swagger-ui/index.html](https://book-a-space.onrender.com/swagger-ui/index.html)
+
 ## Tech Stack
 
 - **Java 17** / **Spring Boot 3.2.5**
