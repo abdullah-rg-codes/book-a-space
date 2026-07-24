@@ -1,0 +1,37 @@
+databases:
+  - name: book-a-space-db
+    plan: free
+    databaseName: bookingdb
+    user: bookinguser
+
+services:
+  - type: web
+    name: book-a-space
+    runtime: docker
+    repo: https://github.com/abdullah-rg-codes/book-a-space
+    branch: main
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_HOST
+        fromDatabase:
+          name: book-a-space-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: book-a-space-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: book-a-space-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: book-a-space-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: book-a-space-db
+          property: password
