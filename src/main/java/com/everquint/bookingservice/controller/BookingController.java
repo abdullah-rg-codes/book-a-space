@@ -54,4 +54,16 @@ public class BookingController {
                 bookingService.listBookings(roomId, from, to, limit, offset);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * POST /bookings/{id}/cancel — Cancel a booking.
+     * Rules enforced in service layer:
+     *   - Must be at least 1 hour before startTime
+     *   - Already cancelled = no-op
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<BookingResponse> cancelBooking(@PathVariable String id) {
+        BookingResponse response = bookingService.cancelBooking(id);
+        return ResponseEntity.ok(response);
+    }
 }
