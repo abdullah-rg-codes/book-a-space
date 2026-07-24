@@ -170,6 +170,18 @@ public class BookingService {
         log.debug("listBookings() called with roomId='{}', from={}, to={}, limit={}, offset={}",
                 roomId, from, to, limit, offset);
 
+        // Guard pagination parameters — invalid values must yield a clean 400,
+        // never an unhandled ArithmeticException (limit == 0) or
+        // IllegalArgumentException from PageRequest (limit < 1 / negative page).
+        if (limit < 1) {
+            log.warn("Validation failed: limit={} must be at least 1", limit);
+            throw new ValidationException("limit must be at least 1");
+        }
+        if (offset < 0) {
+            log.warn("Validation failed: offset={} must not be negative", offset);
+            throw new ValidationException("offset must not be negative");
+        }
+
         // Convert offset/limit to Spring's page-based pagination
         int page = offset / limit;
         Pageable pageable = PageRequest.of(page, limit, Sort.by("startTime").ascending());
