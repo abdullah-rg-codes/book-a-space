@@ -5,6 +5,8 @@ import com.everquint.bookingservice.dto.RoomResponse;
 import com.everquint.bookingservice.entity.Room;
 import com.everquint.bookingservice.exception.DuplicateRoomException;
 import com.everquint.bookingservice.repository.RoomRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +16,10 @@ import java.util.stream.Collectors;
 @Service
 public class RoomService {
 
+    private static final Logger log = LoggerFactory.getLogger(RoomService.class);
+
     private final RoomRepository roomRepository;
 
-    // Constructor injection — preferred over @Autowired field injection (testable, explicit)
     public RoomService(RoomRepository roomRepository) {
         this.roomRepository = roomRepository;
     }
@@ -28,8 +31,12 @@ public class RoomService {
      */
     @Transactional
     public RoomResponse createRoom(CreateRoomRequest request) {
+        log.debug("createRoom() called with name='{}', capacity={}, floor={}",
+                request.name(), request.capacity(), request.floor());
+
         // Business rule: name must be unique (case-insensitive)
         if (roomRepository.existsByNameIgnoreCase(request.name())) {
+            log.warn("Duplicate room name attempted: '{}'", request.name());
             throw new DuplicateRoomException(request.name());
         }
 
@@ -42,25 +49,27 @@ public class RoomService {
 
         // Persist and return
         Room saved = roomRepository.save(room);
+        log.info("Room created successfully: id={}, name='{}'", saved.getId(), saved.getName());
         return RoomResponse.from(saved);
     }
 
     /**
      * Lists all rooms, optionally filtered by minCapacity and/or amenity.
-     *
-     * Filtering approach: load all rooms and filter in-memory.
-     * For a production system with thousands of rooms, you'd push these
-     * filters into a JPQL query or use Specifications. Fine for this scale.
      */
     @Transactional(readOnly = true)
     public List<RoomResponse> listRooms(Integer minCapacity, String amenity) {
+        log.debug("listRooms() called with minCapacity={}, amenity='{}'", minCapacity, amenity);
+
         List<Room> rooms = roomRepository.findAll();
 
-        return rooms.stream()
+        List<RoomResponse> filtered = rooms.stream()
                 .filter(room -> minCapacity == null || room.getCapacity() >= minCapacity)
                 .filter(room -> amenity == null || room.getAmenities().stream()
                         .anyMatch(a -> a.equalsIgnoreCase(amenity)))
                 .map(RoomResponse::from)
                 .collect(Collectors.toList());
+
+        log.debug("listRooms() returning {} rooms (out of {} total)", filtered.size(), rooms.size());
+        return filtered;
     }
 }

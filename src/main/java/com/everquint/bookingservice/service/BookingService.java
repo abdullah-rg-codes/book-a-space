@@ -12,6 +12,8 @@ import com.everquint.bookingservice.exception.RoomNotFoundException;
 import com.everquint.bookingservice.exception.ValidationException;
 import com.everquint.bookingservice.repository.BookingRepository;
 import com.everquint.bookingservice.repository.RoomRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +30,8 @@ import java.util.UUID;
 
 @Service
 public class BookingService {
+
+    private static final Logger log = LoggerFactory.getLogger(BookingService.class);
 
     private static final LocalTime BUSINESS_START = LocalTime.of(8, 0);
     private static final LocalTime BUSINESS_END = LocalTime.of(20, 0);
@@ -52,13 +56,22 @@ public class BookingService {
      */
     @Transactional
     public BookingResponse createBooking(CreateBookingRequest request) {
+        log.debug("createBooking() called with roomId='{}', title='{}', organizer='{}', start={}, end={}",
+                request.roomId(), request.title(), request.organizerEmail(),
+                request.startTime(), request.endTime());
+
         // 1. Validate room exists
         UUID roomId = parseRoomId(request.roomId());
         Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new RoomNotFoundException(request.roomId()));
+                .orElseThrow(() -> {
+                    log.warn("Room not found: roomId='{}'", request.roomId());
+                    return new RoomNotFoundException(request.roomId());
+                });
 
         // 2. startTime must be before endTime
         if (!request.startTime().isBefore(request.endTime())) {
+            log.warn("Validation failed: startTime={} is not before endTime={}",
+                    request.startTime(), request.endTime());
             throw new ValidationException("startTime must be before endTime");
         }
 
@@ -73,6 +86,8 @@ public class BookingService {
                 roomId, request.startTime(), request.endTime(), BookingStatus.CONFIRMED);
 
         if (!overlapping.isEmpty()) {
+            log.warn("Booking conflict: roomId='{}', requested={} to {}, conflicts with {} existing booking(s)",
+                    roomId, request.startTime(), request.endTime(), overlapping.size());
             throw new BookingConflictException(
                     "Room is already booked during the requested time slot");
         }
@@ -87,6 +102,8 @@ public class BookingService {
         booking.setStatus(BookingStatus.CONFIRMED);
 
         Booking saved = bookingRepository.save(booking);
+        log.info("Booking created: id={}, roomId='{}', title='{}', {} to {}",
+                saved.getId(), roomId, saved.getTitle(), saved.getStartTime(), saved.getEndTime());
         return BookingResponse.from(saved);
     }
 
@@ -104,8 +121,10 @@ public class BookingService {
             String roomId, LocalDateTime from, LocalDateTime to,
             int limit, int offset) {
 
+        log.debug("listBookings() called with roomId='{}', from={}, to={}, limit={}, offset={}",
+                roomId, from, to, limit, offset);
+
         // Convert offset/limit to Spring's page-based pagination
-        // offset = page * size, so page = offset / limit
         int page = offset / limit;
         Pageable pageable = PageRequest.of(page, limit, Sort.by("startTime").ascending());
 
@@ -117,6 +136,8 @@ public class BookingService {
         List<BookingResponse> items = bookingPage.getContent().stream()
                 .map(BookingResponse::from)
                 .toList();
+
+        log.debug("listBookings() returning {} items (total={})", items.size(), bookingPage.getTotalElements());
 
         return new PaginatedResponse<>(
                 items,
@@ -136,19 +157,27 @@ public class BookingService {
      */
     @Transactional
     public BookingResponse cancelBooking(String bookingId) {
+        log.debug("cancelBooking() called with bookingId='{}'", bookingId);
+
         UUID id = parseBookingId(bookingId);
 
         Booking booking = bookingRepository.findById(id)
-                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+                .orElseThrow(() -> {
+                    log.warn("Booking not found for cancellation: id='{}'", bookingId);
+                    return new BookingNotFoundException(bookingId);
+                });
 
         // Already cancelled — no-op, return as-is
         if (booking.getStatus() == BookingStatus.CANCELLED) {
+            log.info("Booking already cancelled, returning existing: id='{}'", bookingId);
             return BookingResponse.from(booking);
         }
 
         // Grace period: must cancel at least 1 hour before start time
         LocalDateTime cancellationDeadline = booking.getStartTime().minusHours(1);
         if (!LocalDateTime.now().isBefore(cancellationDeadline)) {
+            log.warn("Cancellation rejected (too late): bookingId='{}', startTime={}, deadline={}",
+                    bookingId, booking.getStartTime(), cancellationDeadline);
             throw new ValidationException(
                     "Booking can only be cancelled up to 1 hour before start time");
         }
@@ -156,6 +185,8 @@ public class BookingService {
         // Cancel the booking
         booking.setStatus(BookingStatus.CANCELLED);
         Booking saved = bookingRepository.save(booking);
+        log.info("Booking cancelled: id='{}', was scheduled {} to {}",
+                bookingId, saved.getStartTime(), saved.getEndTime());
         return BookingResponse.from(saved);
     }
 
@@ -168,10 +199,12 @@ public class BookingService {
         Duration duration = Duration.between(start, end);
 
         if (duration.compareTo(MIN_DURATION) < 0) {
+            log.warn("Validation failed: duration {} is less than minimum 15 minutes", duration);
             throw new ValidationException(
                     "Booking duration must be at least 15 minutes");
         }
         if (duration.compareTo(MAX_DURATION) > 0) {
+            log.warn("Validation failed: duration {} exceeds maximum 4 hours", duration);
             throw new ValidationException(
                     "Booking duration must not exceed 4 hours");
         }
@@ -183,20 +216,20 @@ public class BookingService {
      * - Start time >= 08:00 and end time <= 20:00
      */
     private void validateWorkingHours(LocalDateTime start, LocalDateTime end) {
-        // Check day of week for both start and end
         DayOfWeek startDay = start.getDayOfWeek();
         DayOfWeek endDay = end.getDayOfWeek();
 
         if (isWeekend(startDay) || isWeekend(endDay)) {
+            log.warn("Validation failed: booking on weekend (startDay={}, endDay={})", startDay, endDay);
             throw new ValidationException(
                     "Bookings are only allowed Monday to Friday");
         }
 
-        // Check time bounds
         LocalTime startTime = start.toLocalTime();
         LocalTime endTime = end.toLocalTime();
 
         if (startTime.isBefore(BUSINESS_START) || endTime.isAfter(BUSINESS_END)) {
+            log.warn("Validation failed: outside business hours (start={}, end={})", startTime, endTime);
             throw new ValidationException(
                     "Bookings are only allowed between 08:00 and 20:00");
         }
