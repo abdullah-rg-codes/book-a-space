@@ -25,12 +25,17 @@ public class BookingController {
      * POST /bookings — Create a new booking.
      * Business rules validated in the service layer.
      * Returns 201 Created with booking (status: "CONFIRMED").
+     *
+     * Supports optional Idempotency-Key header:
+     * - If provided, duplicate requests with the same key (per organizer) return the original booking.
+     * - If not provided, behaves as a normal create.
      */
     @PostMapping
     public ResponseEntity<BookingResponse> createBooking(
-            @Valid @RequestBody CreateBookingRequest request) {
+            @Valid @RequestBody CreateBookingRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
-        BookingResponse response = bookingService.createBooking(request);
+        BookingResponse response = bookingService.createBooking(request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

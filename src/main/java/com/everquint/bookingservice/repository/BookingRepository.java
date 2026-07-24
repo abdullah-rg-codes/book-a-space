@@ -48,4 +48,17 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             Pageable pageable);
+
+    /**
+     * Finds all confirmed bookings that overlap with the given time range.
+     * Used for utilization report — fetches across all rooms.
+     * A booking overlaps [from, to] when: booking.startTime < to AND booking.endTime > from
+     */
+    @Query("SELECT b FROM Booking b WHERE b.status = :status " +
+           "AND b.startTime < :to " +
+           "AND b.endTime > :from")
+    List<Booking> findConfirmedBookingsInRange(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("status") BookingStatus status);
 }
