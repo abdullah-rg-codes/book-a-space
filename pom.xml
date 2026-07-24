@@ -48,6 +48,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Swagger/OpenAPI: auto-generated API docs + interactive UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+
         <!-- Test: JUnit 5 + Mockito + Spring Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
