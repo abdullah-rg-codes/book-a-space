@@ -9,6 +9,7 @@ import com.everquint.bookingservice.exception.BookingConflictException;
 import com.everquint.bookingservice.exception.RoomNotFoundException;
 import com.everquint.bookingservice.exception.ValidationException;
 import com.everquint.bookingservice.repository.BookingRepository;
+import com.everquint.bookingservice.repository.IdempotencyRepository;
 import com.everquint.bookingservice.repository.RoomRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,6 +37,9 @@ class BookingServiceUnitTest {
 
     @Mock
     private RoomRepository roomRepository;
+
+    @Mock
+    private IdempotencyRepository idempotencyRepository;
 
     @InjectMocks
     private BookingService bookingService;
@@ -75,7 +79,7 @@ class BookingServiceUnitTest {
 
         when(roomRepository.findById(roomId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> bookingService.createBooking(request))
+        assertThatThrownBy(() -> bookingService.createBooking(request, null))
                 .isInstanceOf(RoomNotFoundException.class);
     }
 
@@ -98,7 +102,7 @@ class BookingServiceUnitTest {
                     mondayAt9, mondayAt9
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("startTime must be before endTime");
         }
@@ -111,7 +115,7 @@ class BookingServiceUnitTest {
                     mondayAt9.plusHours(2), mondayAt9
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("startTime must be before endTime");
         }
@@ -136,7 +140,7 @@ class BookingServiceUnitTest {
                     mondayAt9, mondayAt9.plusMinutes(10)
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("at least 15 minutes");
         }
@@ -149,7 +153,7 @@ class BookingServiceUnitTest {
                     mondayAt9, mondayAt9.plusHours(5)
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("must not exceed 4 hours");
         }
@@ -170,7 +174,7 @@ class BookingServiceUnitTest {
                 return b;
             });
 
-            BookingResponse response = bookingService.createBooking(request);
+            BookingResponse response = bookingService.createBooking(request, null);
             assertThat(response).isNotNull();
             assertThat(response.status()).isEqualTo(BookingStatus.CONFIRMED);
         }
@@ -191,7 +195,7 @@ class BookingServiceUnitTest {
                 return b;
             });
 
-            BookingResponse response = bookingService.createBooking(request);
+            BookingResponse response = bookingService.createBooking(request, null);
             assertThat(response).isNotNull();
         }
     }
@@ -216,7 +220,7 @@ class BookingServiceUnitTest {
                     saturday, saturday.plusHours(1)
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("Monday to Friday");
         }
@@ -230,7 +234,7 @@ class BookingServiceUnitTest {
                     sunday, sunday.plusHours(1)
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("Monday to Friday");
         }
@@ -244,7 +248,7 @@ class BookingServiceUnitTest {
                     earlyStart, earlyStart.plusHours(1)
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("08:00 and 20:00");
         }
@@ -258,7 +262,7 @@ class BookingServiceUnitTest {
                     lateStart, lateStart.plusHours(1)
             );
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(ValidationException.class)
                     .hasMessageContaining("08:00 and 20:00");
         }
@@ -282,7 +286,7 @@ class BookingServiceUnitTest {
                 return b;
             });
 
-            BookingResponse response = bookingService.createBooking(request);
+            BookingResponse response = bookingService.createBooking(request, null);
             assertThat(response).isNotNull();
         }
     }
@@ -317,7 +321,7 @@ class BookingServiceUnitTest {
                     eq(roomId), any(), any(), eq(BookingStatus.CONFIRMED)))
                     .thenReturn(List.of(existing));
 
-            assertThatThrownBy(() -> bookingService.createBooking(request))
+            assertThatThrownBy(() -> bookingService.createBooking(request, null))
                     .isInstanceOf(BookingConflictException.class)
                     .hasMessageContaining("already booked");
         }
@@ -339,7 +343,7 @@ class BookingServiceUnitTest {
                 return b;
             });
 
-            BookingResponse response = bookingService.createBooking(request);
+            BookingResponse response = bookingService.createBooking(request, null);
             assertThat(response.status()).isEqualTo(BookingStatus.CONFIRMED);
         }
     }

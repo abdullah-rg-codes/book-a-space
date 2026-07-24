@@ -5,15 +5,18 @@ import com.everquint.bookingservice.dto.CreateBookingRequest;
 import com.everquint.bookingservice.dto.PaginatedResponse;
 import com.everquint.bookingservice.entity.Booking;
 import com.everquint.bookingservice.entity.BookingStatus;
+import com.everquint.bookingservice.entity.IdempotencyRecord;
 import com.everquint.bookingservice.entity.Room;
 import com.everquint.bookingservice.exception.BookingConflictException;
 import com.everquint.bookingservice.exception.BookingNotFoundException;
 import com.everquint.bookingservice.exception.RoomNotFoundException;
 import com.everquint.bookingservice.exception.ValidationException;
 import com.everquint.bookingservice.repository.BookingRepository;
+import com.everquint.bookingservice.repository.IdempotencyRepository;
 import com.everquint.bookingservice.repository.RoomRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +29,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -40,10 +44,14 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
+    private final IdempotencyRepository idempotencyRepository;
 
-    public BookingService(BookingRepository bookingRepository, RoomRepository roomRepository) {
+    public BookingService(BookingRepository bookingRepository,
+                          RoomRepository roomRepository,
+                          IdempotencyRepository idempotencyRepository) {
         this.bookingRepository = bookingRepository;
         this.roomRepository = roomRepository;
+        this.idempotencyRepository = idempotencyRepository;
     }
 
     /**
@@ -53,12 +61,30 @@ public class BookingService {
      * 3. Duration between 15 min and 4 hours
      * 4. Must fall within Mon-Fri, 08:00-20:00
      * 5. No overlapping confirmed bookings for the same room
+     *
+     * If an idempotencyKey is provided:
+     * - Returns the existing booking if the key was already used by this organizer
+     * - Otherwise creates the booking and stores the idempotency record
+     * - Concurrent duplicate requests are handled via DB unique constraint + retry
      */
     @Transactional
-    public BookingResponse createBooking(CreateBookingRequest request) {
-        log.debug("createBooking() called with roomId='{}', title='{}', organizer='{}', start={}, end={}",
+    public BookingResponse createBooking(CreateBookingRequest request, String idempotencyKey) {
+        log.debug("createBooking() called with roomId='{}', title='{}', organizer='{}', start={}, end={}, idempotencyKey='{}'",
                 request.roomId(), request.title(), request.organizerEmail(),
-                request.startTime(), request.endTime());
+                request.startTime(), request.endTime(), idempotencyKey);
+
+        // Idempotency check: if key provided, look for existing record
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<IdempotencyRecord> existing = idempotencyRepository
+                    .findByIdempotencyKeyAndOrganizerEmail(idempotencyKey, request.organizerEmail());
+
+            if (existing.isPresent()) {
+                Booking existingBooking = existing.get().getBooking();
+                log.info("Idempotent request detected: key='{}', returning existing bookingId={}",
+                        idempotencyKey, existingBooking.getId());
+                return BookingResponse.from(existingBooking);
+            }
+        }
 
         // 1. Validate room exists
         UUID roomId = parseRoomId(request.roomId());
@@ -104,6 +130,26 @@ public class BookingService {
         Booking saved = bookingRepository.save(booking);
         log.info("Booking created: id={}, roomId='{}', title='{}', {} to {}",
                 saved.getId(), roomId, saved.getTitle(), saved.getStartTime(), saved.getEndTime());
+
+        // Store idempotency record if key was provided
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            try {
+                IdempotencyRecord record = new IdempotencyRecord(
+                        idempotencyKey, request.organizerEmail(), saved);
+                idempotencyRepository.save(record);
+                log.debug("Idempotency record stored: key='{}', organizer='{}', bookingId={}",
+                        idempotencyKey, request.organizerEmail(), saved.getId());
+            } catch (DataIntegrityViolationException ex) {
+                // Concurrent request with same key won the race — return existing
+                log.info("Concurrent idempotent request detected (constraint violation): key='{}'", idempotencyKey);
+                Optional<IdempotencyRecord> existing = idempotencyRepository
+                        .findByIdempotencyKeyAndOrganizerEmail(idempotencyKey, request.organizerEmail());
+                if (existing.isPresent()) {
+                    return BookingResponse.from(existing.get().getBooking());
+                }
+            }
+        }
+
         return BookingResponse.from(saved);
     }
 
